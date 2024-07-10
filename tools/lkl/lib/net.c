@@ -595,7 +595,8 @@ int lkl_if_del_ip(int ifindex, int af, void *addr, unsigned int netprefix_len)
 }
 
 static int iproute_modify(int cmd, unsigned int flags, int ifindex, int af,
-		void *route_addr, int route_masklen, void *gwaddr)
+			  void *route_addr, int route_masklen, void *gwaddr,
+			  void *gwifname)
 {
 	struct {
 		struct lkl_nlmsghdr	n;
@@ -632,6 +633,9 @@ static int iproute_modify(int cmd, unsigned int flags, int ifindex, int af,
 		req.r.rtm_scope = LKL_RT_SCOPE_UNIVERSE;
 		req.r.rtm_type = LKL_RTN_UNICAST;
 	}
+
+	if (!route_addr)
+		req.r.rtm_flags = LKL_RTNH_F_ONLINK;
 
 	if (gwaddr)
 		addattr_l(&req.n, sizeof(req),
@@ -675,6 +679,13 @@ static int iproute_modify(int cmd, unsigned int flags, int ifindex, int af,
 			req.r.rtm_table = ifindex * 2 + 1;
 		addattr_l(&req.n, sizeof(req), LKL_RTA_OIF, &ifindex, addr_sz);
 	}
+
+	if (gwifname) {
+		int idx = lkl_ifname_to_ifindex(gwifname);
+		addattr_l(&req.n, sizeof(req), LKL_RTA_OIF,
+			  &idx, addr_sz);
+	}
+
 	err = rtnl_talk(fd, &req.n);
 	lkl_sys_close(fd);
 	return err;
@@ -683,19 +694,19 @@ static int iproute_modify(int cmd, unsigned int flags, int ifindex, int af,
 int lkl_if_add_linklocal(int ifindex, int af,  void *addr, int netprefix_len)
 {
 	return iproute_modify(LKL_RTM_NEWROUTE, LKL_NLM_F_CREATE|LKL_NLM_F_EXCL,
-			ifindex, af, addr, netprefix_len, NULL);
+			      ifindex, af, addr, netprefix_len, NULL, NULL);
 }
 
 int lkl_if_add_gateway(int ifindex, int af, void *gwaddr)
 {
 	return iproute_modify(LKL_RTM_NEWROUTE, LKL_NLM_F_CREATE|LKL_NLM_F_EXCL,
-			ifindex, af, NULL, 0, gwaddr);
+			      ifindex, af, NULL, 0, gwaddr, NULL);
 }
 
 int lkl_add_gateway(int af, void *gwaddr)
 {
 	return iproute_modify(LKL_RTM_NEWROUTE, LKL_NLM_F_CREATE|LKL_NLM_F_EXCL,
-			LKL_RT_TABLE_MAIN, af, NULL, 0, gwaddr);
+			      LKL_RT_TABLE_MAIN, af, NULL, 0, gwaddr, "eth0");
 }
 
 static int iprule_modify(int cmd, int ifindex, int af, void *saddr)
@@ -815,6 +826,90 @@ void lkl_qdisc_parse_add(int ifindex, const char *entries)
 		ret = lkl_qdisc_add(ifindex, root, type);
 		if (ret) {
 			lkl_printf("Failed to add qdisc entry: %s\n",
+				   lkl_strerror(ret));
+			return;
+		}
+	}
+}
+
+/* Configure routing table parameters as the form of "dst=gw(or ifname);dst=gw;..." */
+void lkl_route_parse_add(const char *routes)
+{
+	char *saveptr = NULL, *token = NULL;
+	char *dst = NULL, *gw = NULL, *net = NULL, *plen = NULL;
+	char strings[256];
+	int ret = 0;
+
+	strcpy(strings, routes);
+	for (token = strtok_r(strings, ";", &saveptr); token;
+	     token = strtok_r(NULL, ";", &saveptr)) {
+		unsigned int gwaddr, netaddr, prefix_len, af;
+		char gw6addr[16], net6addr[16];
+		void *net_ptr, *gw_ptr = NULL;
+
+		char *ifname = NULL;
+
+		dst = strtok(token, "=");
+		gw = strtok(NULL, "=");
+
+		if (!dst || !gw) {
+			lkl_printf("Invalid route configuration: (dst=%p, gw=%p)\n",
+				   dst, gw);
+			continue;
+		}
+		/* e.g., dst = 192.168.5.0/28 */
+		net = strtok(dst, "/");
+		plen = strtok(NULL, "/");
+
+		/* gateway addr or ifname */
+		if (inet_pton(LKL_AF_INET, gw,
+			      (struct lkl_in_addr *)&gwaddr) == 1) {
+			gw_ptr = (void *)&gwaddr;
+			af = LKL_AF_INET;
+		}
+		else if (inet_pton(LKL_AF_INET6, gw,
+				   (struct lkl_in6_addr *)&gw6addr) == 1) {
+			gw_ptr = (void *)&gw6addr;
+			af = LKL_AF_INET6;
+		}
+		else
+			ifname = gw;
+
+		/* parse dst info */
+		if (inet_pton(LKL_AF_INET, net,
+			      (struct lkl_in_addr *)&netaddr) == 1) {
+			net_ptr = (void *)&netaddr;
+			af = LKL_AF_INET;
+		}
+		else if (inet_pton(LKL_AF_INET6, net,
+				   (struct lkl_in6_addr *)&net6addr) == 1) {
+			net_ptr = (void *)&net6addr;
+			af = LKL_AF_INET6;
+		}
+		else {
+			lkl_printf("Invalid ip destination: %s\n", net);
+			continue;
+		}
+		prefix_len = atoi(plen);
+
+		/* add route */
+		if (ifname) {
+			ret = iproute_modify(LKL_RTM_NEWROUTE,
+					     LKL_NLM_F_CREATE|LKL_NLM_F_EXCL,
+					     LKL_RT_TABLE_MAIN,
+					     af, net_ptr, prefix_len,
+					     0,
+					     ifname);
+		}
+		else {
+			ret = iproute_modify(LKL_RTM_NEWROUTE,
+					     LKL_NLM_F_CREATE|LKL_NLM_F_EXCL,
+					     LKL_RT_TABLE_MAIN,
+					     af, net_ptr, prefix_len,
+					     gw_ptr, NULL);
+		}
+		if (ret) {
+			lkl_printf("Failed to add a routing entry: %s\n",
 				   lkl_strerror(ret));
 			return;
 		}

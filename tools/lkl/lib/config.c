@@ -192,6 +192,8 @@ int lkl_load_config_json(struct lkl_config *cfg, char *jstr)
 			cfgptr = &cfg->dump;
 		} else if (jsoneq(jstr, &toks[pos], "delay_main") == 0) {
 			cfgptr = &cfg->delay_main;
+		} else if (jsoneq(jstr, &toks[pos], "route") == 0) {
+			cfgptr = &cfg->routes;
 		} else {
 			lkl_printf("unexpected key in json %.*s\n",
 					toks[pos].end-toks[pos].start,
@@ -223,6 +225,7 @@ void lkl_show_config(struct lkl_config *cfg)
 	lkl_printf("cmdline: %s\n", cfg->boot_cmdline);
 	lkl_printf("dump: %s\n", cfg->dump);
 	lkl_printf("delay: %s\n", cfg->delay_main);
+	lkl_printf("route: %s\n", cfg->routes);
 
 	for (iface = cfg->ifaces; iface; iface = iface->next, i++) {
 		lkl_printf("ifname[%d] = %s\n", i, iface->ifname);
@@ -592,7 +595,7 @@ static int lkl_config_netdev_configure(struct lkl_config *cfg,
 
 		int nmlen = atoi(iface->ifnetmask_len);
 
-		if (addr != LKL_INADDR_NONE && nmlen > 0 && nmlen < 32) {
+		if (addr != LKL_INADDR_NONE && nmlen > 0 && nmlen <= 32) {
 			ret = lkl_if_set_ipv4(nd_ifindex, addr, nmlen);
 			if (ret < 0)
 				lkl_printf("failed to set IPv4 address: %s\n",
@@ -697,6 +700,7 @@ static int lkl_clean_config(struct lkl_config *cfg)
 	free_cfgparam(cfg->boot_cmdline);
 	free_cfgparam(cfg->dump);
 	free_cfgparam(cfg->delay_main);
+	free_cfgparam(cfg->routes);
 	return 0;
 }
 
@@ -771,6 +775,10 @@ int lkl_load_config_post(struct lkl_config *cfg)
 
 	if (cfg->sysctls)
 		lkl_sysctl_parse_write(cfg->sysctls);
+
+	void lkl_route_parse_add(const char *routes);
+	if (cfg->routes)
+		lkl_route_parse_add(cfg->routes);
 
 	/* put a delay before calling main() */
 	if (cfg->delay_main) {
