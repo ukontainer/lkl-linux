@@ -52,6 +52,7 @@ GCCSYMBOLS:=$(GCCSYMBOLS)|__aeabi_llsr|__aeabi_lasr
 GCCSYMBOLS:=$(GCCSYMBOLS)|__aeabi_uidiv|__aeabi_uidivmod|__aeabi_uldivmod
 GCCATOMIC=__sync_synchronize|__sync_fetch_and_sub_4|__sync_fetch_and_add_4
 GCCATOMIC:=$(GCCATOMIC)|__sync_fetch_and_and_4|__sync_fetch_and_or_4
+GCCATOMIC:=$(GCCATOMIC)|__aarch64_ldadd4_sync|__aarch64_ldclr8_sync|__aarch64_ldset8_sync
 VMLINUX_SYMS=__start___ex_table|__stop___ex_table|boot_cmdline
 EXP_SYMRENAME=rump|RUMP|bmk_|lib_|nuse_|lkl_|__tls|__initcall_start
 EXP_SYMRENAME:=$(EXP_SYMRENAME)|__bzero|__sched
