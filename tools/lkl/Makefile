@@ -49,7 +49,8 @@ $(OUTPUT)Makefile.conf: Makefile.autoconf
 export CFLAGS += -I$(OUTPUT)/include -Iinclude -Wall -g -O2 -Wextra \
 	 -Wno-unused-parameter \
 	 -Wno-missing-field-initializers -fno-strict-aliasing \
-	 -D_FORTIFY_SOURCE=0 -fno-stack-protector
+	 -D_FORTIFY_SOURCE=0 -fno-stack-protector \
+	 -Wno-implicit-function-declaration
 
 -include Targets
 
