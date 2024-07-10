@@ -9,3 +9,5 @@ endif
 
 $(obj)/vmlinux-mach-o.o: $(src)/vmlinux-mach-o.lds FORCE
 	$(Q)$(AS) -c -o $@ $<
+
+CFLAGS_console.o = -Wno-int-conversion
