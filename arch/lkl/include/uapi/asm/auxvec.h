@@ -1,7 +1,7 @@
 #ifndef _ASM_UAPI_LKL_AUXVEC_H
 #define _ASM_UAPI_LKL_AUXVEC_H
 
-#define AT_PARENT_SYSCALL	27
+#define AT_PARENT_SYSCALL	52
 #define AT_VECTOR_SIZE_ARCH	1
 
 #endif /* _ASM_UAPI_LKL_AUXVEC_H */
