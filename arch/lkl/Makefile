@@ -8,6 +8,8 @@ KBUILD_CFLAGS += -fPIC
 ifeq ($(OUTPUT_FORMAT),mach-o-x86-64)
 # workaround for Mach-O section name
 LINUXINCLUDE := -I $(srctree)/arch/lkl/include/mach $(LINUXINCLUDE)
+else ifeq ($(OUTPUT_FORMAT),elf64-littleaarch64)
+KBUILD_CFLAGS += -mno-outline-atomics
 endif
 else ifneq (,$(filter $(OUTPUT_FORMAT),pe-i386 pe-x86-64 ))
 ifneq ($(OUTPUT_FORMAT),pe-x86-64)
